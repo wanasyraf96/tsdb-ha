@@ -1,0 +1,43 @@
+services:
+  haproxy:
+    image: ${HAPROXY_IMAGE_TAG}
+    container_name: haproxy
+    hostname: haproxy
+    restart: unless-stopped
+    volumes:
+      - ./haproxy/haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg:ro
+    ports:
+      - "127.0.0.1:${HAPROXY_READ_HOST_PORT}:5001"
+      - "127.0.0.1:${HAPROXY_STATS_HOST_PORT}:7000"
+    networks:
+      - tsdb-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:7000/ >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  pgbouncer:
+    image: ${PGBOUNCER_IMAGE_TAG}
+    container_name: pgbouncer
+    hostname: pgbouncer
+    restart: unless-stopped
+    depends_on:
+      haproxy:
+        condition: service_healthy
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGBOUNCER_AUTH_PASSWORD: ${PGBOUNCER_AUTH_PASSWORD}
+    volumes:
+      - ./pgbouncer/pgbouncer.ini:/etc/pgbouncer/pgbouncer.ini:ro
+      - ./pgbouncer/entrypoint.sh:/usr/local/bin/tsdb-pgbouncer-entrypoint.sh:ro
+    entrypoint: ["/bin/sh", "/usr/local/bin/tsdb-pgbouncer-entrypoint.sh"]
+    ports:
+      - "${PGBOUNCER_HOST_PORT}:5432"
+    networks:
+      - tsdb-net
+
+networks:
+  tsdb-net:
+    name: ${DOCKER_NETWORK}
+    external: true

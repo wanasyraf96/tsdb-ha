@@ -1,0 +1,46 @@
+services:
+  tsdb-replica:
+    image: ${TSDB_HA_IMAGE_TAG}
+    container_name: ${REPLICA_NAME}
+    hostname: ${REPLICA_NAME}
+    restart: unless-stopped
+    environment:
+      CLUSTER_SCOPE: ${CLUSTER_SCOPE}
+      REPLICA_NAME: ${REPLICA_NAME}
+      ETCD_ROOT_PASSWORD: ${ETCD_ROOT_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REPLICATOR_PASSWORD: ${REPLICATOR_PASSWORD}
+      REWIND_PASSWORD: ${REWIND_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - ${REPLICA_PGDATA}:/var/lib/postgresql/data
+      - ${BACKUP_REPO}:/var/lib/pgbackrest
+      - ./patroni.yml:/etc/patroni/patroni.yml:ro
+      - ./pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+    networks:
+      - tsdb-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8008/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 36
+      start_period: 60s
+
+  pg-exporter-replica:
+    image: ${PG_EXPORTER_IMAGE_TAG}
+    container_name: pg-exporter-replica
+    restart: unless-stopped
+    depends_on:
+      tsdb-replica:
+        condition: service_healthy
+    environment:
+      DATA_SOURCE_NAME: "postgresql://monitoring:${MONITORING_PASSWORD}@${REPLICA_NAME}:5432/postgres?sslmode=disable"
+    ports:
+      - "127.0.0.1:${REPLICA_EXPORTER_HOST_PORT}:9187"
+    networks:
+      - tsdb-net
+
+networks:
+  tsdb-net:
+    name: ${DOCKER_NETWORK}
+    external: true

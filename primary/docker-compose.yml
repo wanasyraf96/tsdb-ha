@@ -1,0 +1,56 @@
+services:
+  tsdb-primary:
+    image: ${TSDB_HA_IMAGE_TAG}
+    container_name: ${PRIMARY_NAME}
+    hostname: ${PRIMARY_NAME}
+    restart: unless-stopped
+    environment:
+      CLUSTER_SCOPE: ${CLUSTER_SCOPE}
+      PRIMARY_NAME: ${PRIMARY_NAME}
+      ETCD_ROOT_PASSWORD: ${ETCD_ROOT_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REPLICATOR_PASSWORD: ${REPLICATOR_PASSWORD}
+      REWIND_PASSWORD: ${REWIND_PASSWORD}
+      APP_USER: ${APP_USER}
+      APP_PASSWORD: ${APP_PASSWORD}
+      APP_DB: ${APP_DB}
+      MONITORING_PASSWORD: ${MONITORING_PASSWORD}
+      PGBOUNCER_AUTH_PASSWORD: ${PGBOUNCER_AUTH_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+      # Set by `make restore` to activate Patroni's PITR bootstrap method.
+      # Empty in normal operation; the bootstrap block is dormant.
+      POINT_IN_TIME: ${POINT_IN_TIME:-}
+    volumes:
+      - ${PRIMARY_PGDATA}:/var/lib/postgresql/data
+      - ${BACKUP_REPO}:/var/lib/pgbackrest
+      - ./patroni.yml:/etc/patroni/patroni.yml:ro
+      - ./post-init.sh:/etc/patroni/post-init.sh:ro
+      - ./pitr-bootstrap.sh:/etc/patroni/pitr-bootstrap.sh:ro
+      - ./pgbackrest.conf:/etc/pgbackrest/pgbackrest.conf:ro
+    networks:
+      - tsdb-net
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8008/health || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 30s
+
+  pg-exporter-primary:
+    image: ${PG_EXPORTER_IMAGE_TAG}
+    container_name: pg-exporter-primary
+    restart: unless-stopped
+    depends_on:
+      tsdb-primary:
+        condition: service_healthy
+    environment:
+      DATA_SOURCE_NAME: "postgresql://monitoring:${MONITORING_PASSWORD}@${PRIMARY_NAME}:5432/postgres?sslmode=disable"
+    ports:
+      - "127.0.0.1:${PRIMARY_EXPORTER_HOST_PORT}:9187"
+    networks:
+      - tsdb-net
+
+networks:
+  tsdb-net:
+    name: ${DOCKER_NETWORK}
+    external: true

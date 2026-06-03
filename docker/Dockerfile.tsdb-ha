@@ -1,0 +1,28 @@
+ARG TSDB_BASE_IMAGE=timescale/timescaledb:2.27.1-pg18
+FROM ${TSDB_BASE_IMAGE}
+
+ARG PATRONI_VERSION=4.0.4
+
+USER root
+
+RUN apk add --no-cache \
+      python3 py3-pip py3-psycopg2 \
+      pgbackrest \
+      tini su-exec gettext bash curl \
+ && pip install --break-system-packages --no-cache-dir \
+      "patroni[etcd3]==${PATRONI_VERSION}"
+
+# pgBackRest needs writable log/spool/repo/etc dirs owned by postgres
+RUN install -d -o postgres -g postgres \
+      /var/log/pgbackrest \
+      /var/spool/pgbackrest \
+      /var/lib/pgbackrest \
+      /etc/pgbackrest
+
+COPY entrypoint.sh /usr/local/bin/tsdb-entrypoint.sh
+RUN chmod +x /usr/local/bin/tsdb-entrypoint.sh
+
+# Patroni REST API
+EXPOSE 5432 8008
+
+ENTRYPOINT ["/sbin/tini","--","/usr/local/bin/tsdb-entrypoint.sh"]

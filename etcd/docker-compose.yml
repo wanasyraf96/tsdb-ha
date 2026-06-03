@@ -1,0 +1,30 @@
+services:
+  etcd:
+    image: ${ETCD_IMAGE_TAG}
+    container_name: etcd
+    restart: unless-stopped
+    environment:
+      ALLOW_NONE_AUTHENTICATION: "no"
+      ETCD_ROOT_PASSWORD: ${ETCD_ROOT_PASSWORD}
+      ETCD_NAME: etcd
+      ETCD_LISTEN_CLIENT_URLS: http://0.0.0.0:2379
+      ETCD_ADVERTISE_CLIENT_URLS: http://etcd:2379
+      ETCD_LISTEN_PEER_URLS: http://0.0.0.0:2380
+      ETCD_INITIAL_ADVERTISE_PEER_URLS: http://etcd:2380
+      ETCD_INITIAL_CLUSTER: etcd=http://etcd:2380
+      ETCD_INITIAL_CLUSTER_TOKEN: tsdb-etcd-token
+      ETCD_INITIAL_CLUSTER_STATE: new
+    volumes:
+      - ${ETCD_DATA}:/bitnami/etcd
+    networks:
+      - tsdb-net
+    healthcheck:
+      test: ["CMD-SHELL", "etcdctl --user root:${ETCD_ROOT_PASSWORD} endpoint health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+networks:
+  tsdb-net:
+    name: ${DOCKER_NETWORK}
+    external: true

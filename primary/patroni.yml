@@ -1,0 +1,93 @@
+scope: ${CLUSTER_SCOPE}
+namespace: /service/
+name: ${PRIMARY_NAME}
+
+restapi:
+  listen: 0.0.0.0:8008
+  connect_address: ${PRIMARY_NAME}:8008
+
+etcd3:
+  hosts: etcd:2379
+  username: root
+  password: ${ETCD_ROOT_PASSWORD}
+
+bootstrap:
+  # Activated only when POINT_IN_TIME is set in the env (see entrypoint.sh).
+  # On a normal bring-up this line expands to an empty string and Patroni
+  # falls through to the `initdb` section below.
+${PATRONI_BOOTSTRAP_METHOD_LINE}
+  pgbackrest_pitr:
+    command: /etc/patroni/pitr-bootstrap.sh
+    keep_existing_recovery_conf: false
+    no_params: false
+    recovery_conf:
+      restore_command: 'pgbackrest --stanza=${CLUSTER_SCOPE} archive-get %f %p'
+      recovery_target_time: '${POINT_IN_TIME}'
+      recovery_target_action: promote
+      recovery_target_timeline: latest
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    postgresql:
+      use_pg_rewind: true
+      use_slots: true
+      parameters:
+        shared_preload_libraries: 'timescaledb,pg_stat_statements'
+        shared_buffers: 768MB
+        effective_cache_size: 2GB
+        work_mem: 16MB
+        maintenance_work_mem: 128MB
+        wal_buffers: 16MB
+        wal_level: replica
+        max_wal_size: 2GB
+        min_wal_size: 512MB
+        checkpoint_completion_target: 0.9
+        synchronous_commit: 'off'
+        wal_compression: 'on'
+        archive_mode: 'on'
+        archive_command: 'pgbackrest --stanza=${CLUSTER_SCOPE} archive-push %p'
+        max_wal_senders: 5
+        max_replication_slots: 5
+        hot_standby: 'on'
+        hot_standby_feedback: 'on'
+        wal_keep_size: 256MB
+        max_worker_processes: 8
+        max_parallel_workers: 2
+        max_parallel_workers_per_gather: 1
+        timescaledb.max_background_workers: 8
+        log_min_duration_statement: 500ms
+        log_checkpoints: 'on'
+        log_lock_waits: 'on'
+  post_init: /etc/patroni/post-init.sh
+  initdb:
+    - encoding: UTF8
+    - data-checksums
+
+postgresql:
+  listen: 0.0.0.0:5432
+  connect_address: ${PRIMARY_NAME}:5432
+  data_dir: /var/lib/postgresql/data/pgdata
+  bin_dir: /usr/local/bin
+  authentication:
+    replication:
+      username: replicator
+      password: ${REPLICATOR_PASSWORD}
+    superuser:
+      username: postgres
+      password: ${POSTGRES_PASSWORD}
+    rewind:
+      username: rewind_user
+      password: ${REWIND_PASSWORD}
+  parameters: {}
+  pg_hba:
+    - local all          all                  peer
+    - host replication replicator 0.0.0.0/0 scram-sha-256
+    - host all          all        0.0.0.0/0 scram-sha-256
+    - host all          all        ::/0      scram-sha-256
+
+tags:
+  noloadbalance: false
+  clonefrom: false
+  nosync: false

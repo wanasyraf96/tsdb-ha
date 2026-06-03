@@ -1,0 +1,42 @@
+scope: ${CLUSTER_SCOPE}
+namespace: /service/
+name: ${REPLICA_NAME}
+
+restapi:
+  listen: 0.0.0.0:8008
+  connect_address: ${REPLICA_NAME}:8008
+
+etcd3:
+  hosts: etcd:2379
+  username: root
+  password: ${ETCD_ROOT_PASSWORD}
+
+postgresql:
+  listen: 0.0.0.0:5432
+  connect_address: ${REPLICA_NAME}:5432
+  data_dir: /var/lib/postgresql/data/pgdata
+  bin_dir: /usr/local/bin
+  authentication:
+    replication:
+      username: replicator
+      password: ${REPLICATOR_PASSWORD}
+    superuser:
+      username: postgres
+      password: ${POSTGRES_PASSWORD}
+    rewind:
+      username: rewind_user
+      password: ${REWIND_PASSWORD}
+  parameters:
+    shared_buffers: 512MB
+    work_mem: 32MB
+    default_statistics_target: 200
+  pg_hba:
+    - local all          all                  peer
+    - host replication replicator 0.0.0.0/0 scram-sha-256
+    - host all          all        0.0.0.0/0 scram-sha-256
+    - host all          all        ::/0      scram-sha-256
+
+tags:
+  noloadbalance: false
+  clonefrom: false
+  nosync: false
