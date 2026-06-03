@@ -118,7 +118,7 @@ prebuilt multi-arch image on Docker Hub instead of building locally:
 ```bash
 cp .env.example .env
 # In .env, replace TSDB_HA_IMAGE_TAG with:
-#   TSDB_HA_IMAGE_TAG=wanasyraf96/tsdb-ha:latest
+#   TSDB_HA_IMAGE_TAG=wana96/tsdb-ha:latest
 $EDITOR .env
 make pull                   # docker pull the published image
 make up

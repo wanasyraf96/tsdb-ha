@@ -11,7 +11,7 @@ on:
         required: true
 
 env:
-  IMAGE_NAME: wanasyraf96/tsdb-ha
+  IMAGE_NAME: wana96/tsdb-ha
 
 jobs:
   publish:
