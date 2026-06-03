@@ -5,8 +5,8 @@ pgBackRest with continuous WAL archiving + scheduled full/diff backups.
 ## Schedule (host crontab)
 
 ```cron
-0 2 * * 0    cd /path/to/infra/timescaledb && make backup TYPE=full >>/var/log/tsdb-backup.log 2>&1
-0 2 * * 1-6  cd /path/to/infra/timescaledb && make backup TYPE=diff >>/var/log/tsdb-backup.log 2>&1
+0 2 * * 0    cd /path/to/tsdb-ha && make backup TYPE=full >>/var/log/tsdb-backup.log 2>&1
+0 2 * * 1-6  cd /path/to/tsdb-ha && make backup TYPE=diff >>/var/log/tsdb-backup.log 2>&1
 ```
 
 Retention: `repo1-retention-full=2`, `repo1-retention-diff=6` → ~2 weeks PITR.

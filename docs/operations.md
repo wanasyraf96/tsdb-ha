@@ -1,6 +1,6 @@
 # Operations Runbook
 
-Commands assume you're in `infra/timescaledb/` with `.env` in place.
+Commands assume you're in the `tsdb-ha/` repo root with `.env` in place.
 
 ## First-time setup
 
@@ -95,9 +95,9 @@ host's crontab:
 
 ```cron
 # Full backup Sundays 02:00
-0 2 * * 0  cd /path/to/infra/timescaledb && make backup TYPE=full >>/var/log/tsdb-backup.log 2>&1
+0 2 * * 0  cd /path/to/tsdb-ha && make backup TYPE=full >>/var/log/tsdb-backup.log 2>&1
 # Differential Mon–Sat 02:00
-0 2 * * 1-6  cd /path/to/infra/timescaledb && make backup TYPE=diff >>/var/log/tsdb-backup.log 2>&1
+0 2 * * 1-6  cd /path/to/tsdb-ha && make backup TYPE=diff >>/var/log/tsdb-backup.log 2>&1
 ```
 
 (Retention is enforced inside `pgbackrest backup` per the stanza config:

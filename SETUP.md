@@ -37,8 +37,8 @@ If any port is in use, edit the corresponding `*_HOST_PORT` in `.env`
 ## 2. Get the code
 
 ```bash
-git clone https://github.com/VectoCodes/infra.git
-cd infra/timescaledb
+git clone https://github.com/wanasyraf96/tsdb-ha.git
+cd tsdb-ha
 ```
 
 **Verify:** `ls Makefile docker/ primary/ replica/ proxy/ etcd/` shows all
@@ -77,7 +77,31 @@ bash -c 'set -a; . ./.env; set +a; echo "DB=$APP_DB USER=$APP_USER DATA_ROOT=$DA
 special character around an `=`. Values with spaces need quotes:
 `APP_PASSWORD='my password'`.
 
-## 4. Build the custom image
+## 4. Get the tsdb-ha image
+
+You have two options here. Pick one.
+
+### Option A (recommended) — pull the published image
+
+The fastest path. The published image is multi-arch (`linux/amd64` +
+`linux/arm64`) so you don't need to install build dependencies on the host.
+
+In `.env`, replace `TSDB_HA_IMAGE_TAG` with a published tag, e.g.:
+
+```bash
+TSDB_HA_IMAGE_TAG=wana96/tsdb-ha:v0.1.0       # or :latest for the rolling tag
+```
+
+Then:
+
+```bash
+make pull
+```
+
+### Option B — build locally
+
+Use this if you need to customize `TSDB_BASE_IMAGE` or `PATRONI_VERSION`,
+or if you can't reach Docker Hub from the target host.
 
 ```bash
 make build
@@ -88,7 +112,7 @@ This builds `tsdb-ha:<version>-patroni<version>-pgbackrest` from
 TimescaleDB base + installs Patroni + pgBackRest). Subsequent rebuilds
 are cached and fast.
 
-**Verify:**
+### Verify (either option)
 
 ```bash
 docker images | grep tsdb-ha
@@ -98,9 +122,10 @@ You should see one entry matching `TSDB_HA_IMAGE_TAG` from `.env`.
 
 **If it fails:**
 - `failed to authorize` / `connection reset` — pull-through registry issue.
-  Try `docker pull timescale/timescaledb:2.27.1-pg18` directly first.
-- `apk add: not found` — base image isn't Alpine. Check `TSDB_BASE_IMAGE`
-  matches an Alpine variant of TimescaleDB.
+  Try `docker pull timescale/timescaledb:2.27.1-pg18` (build path) or
+  `docker pull wana96/tsdb-ha:latest` (pull path) directly first.
+- `apk add: not found` (build only) — base image isn't Alpine. Check
+  `TSDB_BASE_IMAGE` matches an Alpine variant of TimescaleDB.
 - Out of disk — Docker keeps layers in `/var/lib/docker`. `docker system df`
   shows usage; `docker system prune` frees space.
 
@@ -258,8 +283,8 @@ from the host's crontab to keep the image small and the schedule
 inspectable. Add to the host crontab (`crontab -e`):
 
 ```cron
-0 2 * * 0    cd /path/to/infra/timescaledb && make backup TYPE=full >>/var/log/tsdb-backup.log 2>&1
-0 2 * * 1-6  cd /path/to/infra/timescaledb && make backup TYPE=diff >>/var/log/tsdb-backup.log 2>&1
+0 2 * * 0    cd /path/to/tsdb-ha && make backup TYPE=full >>/var/log/tsdb-backup.log 2>&1
+0 2 * * 1-6  cd /path/to/tsdb-ha && make backup TYPE=diff >>/var/log/tsdb-backup.log 2>&1
 ```
 
 **Verify** by tailing the log after the first scheduled run, or trigger
