@@ -10,8 +10,8 @@ on:
         description: 'Image tag to publish (e.g. v1.0.0). Also pushed as :latest.'
         required: true
 
-env:
-  IMAGE_NAME: wana96/tsdb-ha
+# Image name = <Docker Hub account>/tsdb-ha. The account comes from the
+# DOCKERHUB_USERNAME secret, so the workflow stays portable across forks.
 
 jobs:
   publish:
@@ -61,7 +61,7 @@ jobs:
             TSDB_BASE_IMAGE=${{ env.TSDB_BASE_IMAGE }}
             PATRONI_VERSION=${{ env.PATRONI_VERSION }}
           tags: |
-            ${{ env.IMAGE_NAME }}:latest
-            ${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.ref }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/tsdb-ha:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/tsdb-ha:${{ steps.tag.outputs.ref }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
