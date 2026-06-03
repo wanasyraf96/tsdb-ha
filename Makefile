@@ -43,6 +43,13 @@ build: check-env ## Build the custom tsdb-ha image
 pull: check-env ## Pull the published tsdb-ha image (set TSDB_HA_IMAGE_TAG to a published tag in .env first)
 	docker pull $(TSDB_HA_IMAGE_TAG)
 
+.PHONY: ensure-image
+ensure-image: check-env ## Fail with a clear message if the tsdb-ha image isn't present locally
+	@docker image inspect $(TSDB_HA_IMAGE_TAG) >/dev/null 2>&1 || \
+	  (echo "ERROR: image '$(TSDB_HA_IMAGE_TAG)' not found locally." >&2; \
+	   echo "Run 'make build' (build locally) or 'make pull' (use a published tag) first." >&2; \
+	   exit 1)
+
 .PHONY: net
 net: check-env ## Create external docker network (idempotent)
 	@docker network inspect $(DOCKER_NETWORK) >/dev/null 2>&1 || docker network create $(DOCKER_NETWORK)
@@ -50,6 +57,9 @@ net: check-env ## Create external docker network (idempotent)
 .PHONY: up-etcd
 up-etcd: check-env net ## Start etcd
 	@mkdir -p $(ETCD_DATA)
+	@# bitnamilegacy/etcd runs as uid 1001 and silently fails to start if the
+	@# bind-mount isn't writable. Idempotent fix via a throwaway root container.
+	@docker run --rm -v $(ETCD_DATA):/data --user 0:0 alpine sh -c 'chown -R 1001:0 /data && chmod -R g+rwX /data' >/dev/null
 	docker compose -f etcd/docker-compose.yml --env-file .env up -d
 	@echo "Waiting for etcd to become healthy..."
 	@for i in {1..30}; do \
@@ -65,6 +75,9 @@ down-etcd: check-env ## Stop etcd
 .PHONY: up-primary
 up-primary: check-env net ## Start primary node
 	@mkdir -p $(PRIMARY_PGDATA) $(BACKUP_REPO)
+	@# Backup repo bind-mount must be writable by uid 70 (alpine postgres). The
+	@# tsdb-ha entrypoint chowns PGDATA but not /var/lib/pgbackrest. Idempotent.
+	@docker run --rm -v $(BACKUP_REPO):/data --user 0:0 alpine sh -c 'chown -R 70:70 /data' >/dev/null
 	@chmod +x primary/post-init.sh
 	docker compose -f primary/docker-compose.yml --env-file .env up -d
 	@echo "Waiting for primary to become healthy..."
@@ -113,7 +126,9 @@ down-replica: check-env ## Stop replica node
 nuke-replica: check-env ## DANGER: stop replica AND wipe its PGDATA (forces re-bootstrap)
 	@read -p "Type 'NUKE' to confirm wiping $(REPLICA_PGDATA): " ans && [ "$$ans" = "NUKE" ] || (echo "aborted"; exit 1)
 	docker compose -f replica/docker-compose.yml --env-file .env down
-	rm -rf $(REPLICA_PGDATA)/*
+	@# PGDATA is owned by uid 70 (alpine postgres). Wipe via a root container so
+	@# any host user can run this without sudo.
+	docker run --rm -v $(REPLICA_PGDATA):/data --user 0:0 alpine sh -c 'rm -rf /data/*'
 	@echo "Replica PGDATA wiped. Run 'make up-replica' to re-bootstrap."
 
 define LEADER_CONTAINER
@@ -148,7 +163,7 @@ exporter-curl: check-env ## Curl both postgres_exporters + haproxy stats
 	@curl -sf "http://127.0.0.1:$(HAPROXY_STATS_HOST_PORT)/" >/dev/null && echo "OK" || echo "FAIL"
 
 .PHONY: up
-up: check-env build net up-etcd up-primary up-proxy up-replica ## Full stack: build + bring everything up in order
+up: check-env ensure-image net up-etcd up-primary up-proxy up-replica ## Full stack: bring everything up in order (run `make build` or `make pull` first)
 	@echo
 	@$(MAKE) status
 
@@ -231,11 +246,13 @@ restore: check-env ## DANGER: PITR restore. Usage: make restore POINT_IN_TIME='2
 	@echo "Wiping Patroni cluster state in etcd so the restored primary bootstraps as a fresh leader..."
 	docker exec etcd etcdctl --user root:$(ETCD_ROOT_PASSWORD) del --prefix /service/$(CLUSTER_SCOPE)/
 	@echo "Wiping primary PGDATA so Patroni's pgbackrest_pitr bootstrap method fires..."
-	rm -rf $(PRIMARY_PGDATA)/pgdata
+	@# PGDATA is owned by uid 70 (alpine postgres). Wipe via a root container so
+	@# any host user can run this without sudo.
+	docker run --rm -v $(PRIMARY_PGDATA):/data --user 0:0 alpine sh -c 'rm -rf /data/pgdata'
 	@echo "Bringing primary up with POINT_IN_TIME=$(POINT_IN_TIME). Patroni will run pitr-bootstrap.sh, then replay WAL to target and promote."
 	POINT_IN_TIME='$(POINT_IN_TIME)' $(MAKE) up-primary
 	@echo "Restarting pgbouncer to refresh its connection to the restored cluster..."
 	docker restart pgbouncer >/dev/null
 	@echo "Wiping replica and re-bootstrapping from the restored leader..."
-	rm -rf $(REPLICA_PGDATA)/pgdata
+	docker run --rm -v $(REPLICA_PGDATA):/data --user 0:0 alpine sh -c 'rm -rf /data/pgdata'
 	$(MAKE) up-replica
