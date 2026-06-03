@@ -110,6 +110,23 @@ healthy before starting the next.
 First-time install: [`SETUP.md`](./SETUP.md) has a step-by-step walkthrough
 with verification + debugging at each stage.
 
+### Skip the build — use the published image
+
+If you don't need to customize the PostgreSQL/Patroni versions, point at the
+prebuilt multi-arch image on Docker Hub instead of building locally:
+
+```bash
+cp .env.example .env
+# In .env, replace TSDB_HA_IMAGE_TAG with:
+#   TSDB_HA_IMAGE_TAG=wanasyraf96/tsdb-ha:latest
+$EDITOR .env
+make pull                   # docker pull the published image
+make up
+```
+
+Published tags follow the git tags on this repo (`vMAJOR.MINOR.PATCH`), plus
+a rolling `:latest`. Images are built for `linux/amd64` and `linux/arm64`.
+
 ---
 
 ## Endpoints

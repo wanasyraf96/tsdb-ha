@@ -1,0 +1,67 @@
+name: Publish tsdb-ha image
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Image tag to publish (e.g. v1.0.0). Also pushed as :latest.'
+        required: true
+
+env:
+  IMAGE_NAME: wanasyraf96/tsdb-ha
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Load build args from .env.example
+        run: |
+          set -a
+          source .env.example
+          set +a
+          echo "TSDB_BASE_IMAGE=$TSDB_BASE_IMAGE" >> "$GITHUB_ENV"
+          echo "PATRONI_VERSION=$PATRONI_VERSION" >> "$GITHUB_ENV"
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            REF="${{ inputs.tag }}"
+          else
+            REF="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: docker
+          file: docker/Dockerfile.tsdb-ha
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: false
+          build-args: |
+            TSDB_BASE_IMAGE=${{ env.TSDB_BASE_IMAGE }}
+            PATRONI_VERSION=${{ env.PATRONI_VERSION }}
+          tags: |
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.ref }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

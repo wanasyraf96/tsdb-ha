@@ -39,6 +39,10 @@ build: check-env ## Build the custom tsdb-ha image
 	  -f docker/Dockerfile.tsdb-ha \
 	  docker
 
+.PHONY: pull
+pull: check-env ## Pull the published tsdb-ha image (set TSDB_HA_IMAGE_TAG to a published tag in .env first)
+	docker pull $(TSDB_HA_IMAGE_TAG)
+
 .PHONY: net
 net: check-env ## Create external docker network (idempotent)
 	@docker network inspect $(DOCKER_NETWORK) >/dev/null 2>&1 || docker network create $(DOCKER_NETWORK)
